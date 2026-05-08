@@ -1,98 +1,195 @@
 import math
 import re
-from typing import Dict, Any, List, Tuple
 import zipfile
 import io
+import base64
+from typing import Dict, Any, List, Tuple
 
-DANGEROUS_KEYWORDS = [
-    "cmd.exe", "powershell", "eval", "shellcode", "wscript.shell", 
-    "vba", "autoopen", "wmic", "mimikatz", "invoke-expression",
-    "base64", "hidden"
-]
+try:
+    import pypdf
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
 
-URL_REGEX = re.compile(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
+try:
+    from oletools.olevba import VBA_Parser
+    OLETOOLS_AVAILABLE = True
+except ImportError:
+    OLETOOLS_AVAILABLE = False
 
-def calculate_entropy(data: bytes) -> float:
-    if not data:
-        return 0.0
-    entropy = 0
-    for x in range(256):
-        p_x = float(data.count(x)) / len(data)
-        if p_x > 0:
-            entropy += - p_x * math.log2(p_x)
-    return entropy
+class MalwareDetector:
+    def __init__(self):
+        self.DANGEROUS_KEYWORDS = [
+            b"powershell", b"cmd.exe", b"base64", b"wget", b"eval", 
+            b"shellcode", b"wscript.shell", b"vba", b"autoopen", 
+            b"wmic", b"mimikatz", b"invoke-expression", b"hidden", b"curl"
+        ]
+        self.URL_REGEX = re.compile(rb"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
+        self.BASE64_REGEX = re.compile(rb"(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
+        self.JS_PATTERN = re.compile(rb"<script[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
+        self.JS_EVAL_PATTERN = re.compile(rb"eval\s*\(|document\.write\s*\(|window\.execScript\s*\(")
 
-def detect_urls(text: str) -> List[str]:
-    urls = URL_REGEX.findall(text)
-    return list(set(urls))
+    def detect_suspicious_urls(self, content: bytes) -> dict:
+        urls = self.URL_REGEX.findall(content)
+        unique_urls = list(set(urls))
+        if unique_urls:
+            return {"score": len(unique_urls) * 1, "reason": f"Found {len(unique_urls)} suspicious URLs"}
+        return {"score": 0, "reason": ""}
 
-def detect_keywords(text: str) -> List[str]:
-    found = []
-    lower_text = text.lower()
-    for kw in DANGEROUS_KEYWORDS:
-        if kw in lower_text:
-            found.append(kw)
-    return list(set(found))
+    def detect_dangerous_keywords(self, content: bytes) -> dict:
+        found = []
+        lower_content = content.lower()
+        for kw in self.DANGEROUS_KEYWORDS:
+            if kw in lower_content:
+                found.append(kw.decode('utf-8', errors='ignore'))
+        if found:
+            return {"score": len(found) * 2, "reason": f"Dangerous keywords found: {', '.join(found)}"}
+        return {"score": 0, "reason": ""}
 
-def check_docx_macros(content: bytes) -> bool:
-    try:
-        with zipfile.ZipFile(io.BytesIO(content)) as z:
-            return any("vbaproject" in name.lower() for name in z.namelist())
-    except zipfile.BadZipFile:
-        return False
+    def detect_base64_strings(self, content: bytes) -> dict:
+        b64_strings = self.BASE64_REGEX.findall(content)
+        valid_b64 = []
+        for s in b64_strings:
+            try:
+                decoded = base64.b64decode(s)
+                if len(decoded) > 20:  # Filter out small/false positive base64 chunks
+                    valid_b64.append(s)
+            except Exception:
+                pass
+                
+        if valid_b64:
+            return {"score": len(valid_b64) * 2, "reason": f"Found {len(valid_b64)} large Base64 encoded strings"}
+        return {"score": 0, "reason": ""}
 
-def check_pdf_suspicious_elements(content: bytes) -> List[str]:
-    issues = []
-    if b"/JavaScript" in content or b"/JS" in content:
-        issues.append("Embedded JavaScript found")
-    if b"/Launch" in content:
-        issues.append("Launch action found")
-    if b"/EmbeddedFiles" in content:
-        issues.append("Embedded files found")
-    return issues
-
-def analyze_document(content: bytes, filename: str, extracted_text: str) -> Tuple[int, str, List[str]]:
-    score = 0
-    issues = []
-    filename = filename.lower()
-    
-    # 1. Entropy
-    entropy = calculate_entropy(content)
-    if entropy > 7.5:
-        score += 3
-        issues.append(f"High entropy ({entropy:.2f}): Possible packed/encrypted content")
+    def calculate_entropy(self, content: bytes) -> dict:
+        if not content:
+            return {"score": 0, "reason": ""}
+        entropy = 0
+        for x in range(256):
+            p_x = float(content.count(x)) / len(content)
+            if p_x > 0:
+                entropy += - p_x * math.log2(p_x)
         
-    # 2. Text Analysis
-    urls = detect_urls(extracted_text)
-    if urls:
-        score += 1
-        issues.append(f"Found {len(urls)} URLs")
+        if entropy > 7.5:
+            return {"score": 3, "reason": f"High entropy ({entropy:.2f}): Possible packed/encrypted content"}
+        return {"score": 0, "reason": ""}
+
+    def extract_pdf_metadata_and_suspicious(self, content: bytes) -> dict:
+        if not content.startswith(b"%PDF"):
+            return {"score": 0, "reason": ""}
         
-    keywords = detect_keywords(extracted_text)
-    if keywords:
-        score += 2 * len(keywords)
-        issues.append(f"Dangerous keywords found: {', '.join(keywords)}")
+        score = 0
+        reasons = []
         
-    # 3. File-specific checks
-    if filename.endswith(".pdf") or content.startswith(b"%PDF"):
-        pdf_issues = check_pdf_suspicious_elements(content)
-        for issue in pdf_issues:
-            score += 3
-            issues.append(f"PDF Issue: {issue}")
-            
-    elif filename.endswith(".docx") or filename.endswith(".docm") or content.startswith(b"PK"):
-        if check_docx_macros(content):
+        if b"/JavaScript" in content or b"/JS" in content:
             score += 4
-            issues.append("DOCX Issue: Embedded macros (VBA) found")
+            reasons.append("Embedded JavaScript found in PDF")
+        if b"/Launch" in content:
+            score += 5
+            reasons.append("Launch action found in PDF")
+        if b"/EmbeddedFiles" in content:
+            score += 2
+            reasons.append("Embedded files found in PDF")
+            
+        if PYPDF_AVAILABLE:
+            try:
+                reader = pypdf.PdfReader(io.BytesIO(content))
+                meta = reader.metadata
+                if meta:
+                    # You could analyze metadata here, but we will just report it
+                    reasons.append(f"PDF Metadata extracted ({len(meta)} keys)")
+            except Exception:
+                pass
+                
+        if score > 0:
+            return {"score": score, "reason": " | ".join(reasons)}
+        return {"score": 0, "reason": ""}
 
-    # Determine classification based on score
-    if score == 0:
-        classification = "Safe"
-    elif score < 4:
-        classification = "Low Risk / Suspicious"
-    elif score < 7:
-        classification = "Medium Risk / Malicious"
-    else:
-        classification = "High Risk / Malware"
+    def detect_macros(self, content: bytes, filename: str) -> dict:
+        ext = filename.lower().split('.')[-1]
+        if ext not in ['docx', 'docm', 'doc', 'xls', 'xlsm', 'xlsb', 'ppt', 'pptm']:
+            return {"score": 0, "reason": ""}
+
+        if OLETOOLS_AVAILABLE:
+            try:
+                parser = VBA_Parser(filename, data=content)
+                if parser.detect_vba_macros():
+                    results = parser.analyze_macros()
+                    suspicious_count = len([r for r in results if r[0] == 'Suspicious' or r[0] == 'AutoExec'])
+                    score = 4 + (suspicious_count * 1)
+                    reasons = ["Macros detected via oletools"]
+                    if suspicious_count > 0:
+                        reasons.append(f"{suspicious_count} suspicious VBA keywords/autoexec found")
+                    return {"score": score, "reason": " | ".join(reasons)}
+                return {"score": 0, "reason": ""}
+            except Exception:
+                pass
+                
+        # Fallback to simple zip extraction for OOXML files (docx, docm, etc)
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                if any("vbaproject" in name.lower() for name in z.namelist()):
+                    return {"score": 4, "reason": "Embedded macros (vbaProject.bin) found via Zip archive"}
+        except zipfile.BadZipFile:
+            pass
+            
+        return {"score": 0, "reason": ""}
+
+    def detect_scripts(self, content: bytes) -> dict:
+        score = 0
+        reasons = []
         
-    return score, classification, issues
+        script_tags = self.JS_PATTERN.findall(content)
+        if script_tags:
+            score += len(script_tags) * 1
+            reasons.append(f"Found {len(script_tags)} <script> tags")
+            
+        eval_calls = self.JS_EVAL_PATTERN.findall(content)
+        if eval_calls:
+            score += len(eval_calls) * 2
+            reasons.append(f"Found {len(eval_calls)} JavaScript eval/exec/write calls")
+            
+        if score > 0:
+            return {"score": score, "reason": " | ".join(reasons)}
+        return {"score": 0, "reason": ""}
+
+    def analyze(self, content: bytes, filename: str) -> dict:
+        results = {
+            "total_score": 0,
+            "findings": []
+        }
+        
+        checks = [
+            self.detect_suspicious_urls(content),
+            self.detect_dangerous_keywords(content),
+            self.detect_base64_strings(content),
+            self.calculate_entropy(content),
+            self.extract_pdf_metadata_and_suspicious(content),
+            self.detect_macros(content, filename),
+            self.detect_scripts(content)
+        ]
+        
+        for check in checks:
+            if check["score"] > 0:
+                results["total_score"] += check["score"]
+                results["findings"].append(check)
+                
+        score = results["total_score"]
+        if score == 0:
+            results["classification"] = "Safe"
+        elif score < 5:
+            results["classification"] = "Low Risk / Suspicious"
+        elif score < 10:
+            results["classification"] = "Medium Risk / Malicious"
+        else:
+            results["classification"] = "High Risk / Malware"
+            
+        return results
+
+# Keep backward compatibility with existing main.py if needed
+def analyze_document(content: bytes, filename: str, extracted_text: str) -> Tuple[int, str, List[str]]:
+    detector = MalwareDetector()
+    analysis = detector.analyze(content, filename)
+    
+    issues = [f['reason'] for f in analysis['findings']]
+    return analysis['total_score'], analysis['classification'], issues
