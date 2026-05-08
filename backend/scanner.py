@@ -33,7 +33,7 @@ class MalwareDetector:
         urls = self.URL_REGEX.findall(content)
         unique_urls = list(set(urls))
         if unique_urls:
-            return {"score": len(unique_urls) * 1, "reason": f"Found {len(unique_urls)} suspicious URLs"}
+            return {"score": 20, "reason": f"Suspicious URL(s) detected ({len(unique_urls)} found)"}
         return {"score": 0, "reason": ""}
 
     def detect_dangerous_keywords(self, content: bytes) -> dict:
@@ -43,7 +43,7 @@ class MalwareDetector:
             if kw in lower_content:
                 found.append(kw.decode('utf-8', errors='ignore'))
         if found:
-            return {"score": len(found) * 2, "reason": f"Dangerous keywords found: {', '.join(found)}"}
+            return {"score": 15, "reason": f"Dangerous keywords detected: {', '.join(found)}"}
         return {"score": 0, "reason": ""}
 
     def detect_base64_strings(self, content: bytes) -> dict:
@@ -58,7 +58,7 @@ class MalwareDetector:
                 pass
                 
         if valid_b64:
-            return {"score": len(valid_b64) * 2, "reason": f"Found {len(valid_b64)} large Base64 encoded strings"}
+            return {"score": 20, "reason": f"Encoded text (Base64) detected ({len(valid_b64)} large strings)"}
         return {"score": 0, "reason": ""}
 
     def calculate_entropy(self, content: bytes) -> dict:
@@ -71,24 +71,19 @@ class MalwareDetector:
                 entropy += - p_x * math.log2(p_x)
         
         if entropy > 7.5:
-            return {"score": 3, "reason": f"High entropy ({entropy:.2f}): Possible packed/encrypted content"}
+            return {"score": 25, "reason": f"High entropy ({entropy:.2f}): Possible packed/encrypted content"}
         return {"score": 0, "reason": ""}
 
     def extract_pdf_metadata_and_suspicious(self, content: bytes) -> dict:
         if not content.startswith(b"%PDF"):
             return {"score": 0, "reason": ""}
         
-        score = 0
         reasons = []
-        
         if b"/JavaScript" in content or b"/JS" in content:
-            score += 4
             reasons.append("Embedded JavaScript found in PDF")
         if b"/Launch" in content:
-            score += 5
             reasons.append("Launch action found in PDF")
         if b"/EmbeddedFiles" in content:
-            score += 2
             reasons.append("Embedded files found in PDF")
             
         if PYPDF_AVAILABLE:
@@ -96,13 +91,12 @@ class MalwareDetector:
                 reader = pypdf.PdfReader(io.BytesIO(content))
                 meta = reader.metadata
                 if meta:
-                    # You could analyze metadata here, but we will just report it
-                    reasons.append(f"PDF Metadata extracted ({len(meta)} keys)")
+                    reasons.append(f"PDF Metadata anomaly/extraction ({len(meta)} keys)")
             except Exception:
                 pass
                 
-        if score > 0:
-            return {"score": score, "reason": " | ".join(reasons)}
+        if reasons:
+            return {"score": 10, "reason": "Metadata anomaly: " + " | ".join(reasons)}
         return {"score": 0, "reason": ""}
 
     def detect_macros(self, content: bytes, filename: str) -> dict:
@@ -116,11 +110,10 @@ class MalwareDetector:
                 if parser.detect_vba_macros():
                     results = parser.analyze_macros()
                     suspicious_count = len([r for r in results if r[0] == 'Suspicious' or r[0] == 'AutoExec'])
-                    score = 4 + (suspicious_count * 1)
                     reasons = ["Macros detected via oletools"]
                     if suspicious_count > 0:
                         reasons.append(f"{suspicious_count} suspicious VBA keywords/autoexec found")
-                    return {"score": score, "reason": " | ".join(reasons)}
+                    return {"score": 40, "reason": " | ".join(reasons)}
                 return {"score": 0, "reason": ""}
             except Exception:
                 pass
@@ -129,28 +122,25 @@ class MalwareDetector:
         try:
             with zipfile.ZipFile(io.BytesIO(content)) as z:
                 if any("vbaproject" in name.lower() for name in z.namelist()):
-                    return {"score": 4, "reason": "Embedded macros (vbaProject.bin) found via Zip archive"}
+                    return {"score": 40, "reason": "Embedded macros (vbaProject.bin) found via Zip archive"}
         except zipfile.BadZipFile:
             pass
             
         return {"score": 0, "reason": ""}
 
     def detect_scripts(self, content: bytes) -> dict:
-        score = 0
         reasons = []
         
         script_tags = self.JS_PATTERN.findall(content)
         if script_tags:
-            score += len(script_tags) * 1
             reasons.append(f"Found {len(script_tags)} <script> tags")
             
         eval_calls = self.JS_EVAL_PATTERN.findall(content)
         if eval_calls:
-            score += len(eval_calls) * 2
             reasons.append(f"Found {len(eval_calls)} JavaScript eval/exec/write calls")
             
-        if score > 0:
-            return {"score": score, "reason": " | ".join(reasons)}
+        if reasons:
+            return {"score": 30, "reason": "Scripts detected: " + " | ".join(reasons)}
         return {"score": 0, "reason": ""}
 
     def analyze(self, content: bytes, filename: str) -> dict:
@@ -175,14 +165,14 @@ class MalwareDetector:
                 results["findings"].append(check)
                 
         score = results["total_score"]
-        if score == 0:
+        if score < 20:
             results["classification"] = "Safe"
-        elif score < 5:
-            results["classification"] = "Low Risk / Suspicious"
-        elif score < 10:
-            results["classification"] = "Medium Risk / Malicious"
+        elif score < 50:
+            results["classification"] = "Phishing Payload"
+        elif score <= 80:
+            results["classification"] = "Trojan-like"
         else:
-            results["classification"] = "High Risk / Malware"
+            results["classification"] = "Ransomware-like"
             
         return results
 

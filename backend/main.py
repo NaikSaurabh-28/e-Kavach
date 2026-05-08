@@ -29,13 +29,13 @@ async def upload_file(file: UploadFile = File(...)):
     # Analyze Document
     score, classification, issues = analyze_document(content, file.filename, extracted_text)
     
+    status = "safe" if classification == "Safe" else "malicious"
+    
     return {
-        "status": "success",
-        "filename": file.filename,
+        "status": status,
         "score": score,
         "classification": classification,
-        "detected_issues": issues,
-        "extracted_text_preview": extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text
+        "issues": issues
     }
 
 if __name__ == "__main__":
