@@ -17,9 +17,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 export async function generateMalwareExplanation(scanDetails) {
   try {
     const prompt = `
-You are a cybersecurity expert analyzing a potential malware threat for a government document portal.
-Please provide a clear, concise, and professional explanation of the following threat.
-Include the potential impact and recommended mitigation steps.
+You are a cybersecurity assistant for Indian court clerks.
+Explain the following malware finding in simple English. Keep it non-technical.
 
 Threat Details:
 - File Name: ${scanDetails.fileName}
@@ -27,11 +26,12 @@ Threat Details:
 - Risk Level: ${scanDetails.riskLevel}
 - Indicators of Compromise: ${scanDetails.indicators ? scanDetails.indicators.join(', ') : 'None specified'}
 
-Output Format:
-1. Executive Summary
-2. Technical Explanation
-3. Potential Impact
-4. Recommended Actions
+Please provide the explanation mentioning exactly these points:
+- What was found
+- Where it was found
+- Why dangerous
+- Possible impact
+- Recommended action
 `;
 
     // Using gemini-2.5-pro as it's the recommended model for complex reasoning tasks
