@@ -4,8 +4,8 @@ import Login from './pages/Login';
 import DashboardLayout from './layouts/DashboardLayout';
 import DashboardOverview from './pages/DashboardOverview';
 import UploadSection from './pages/UploadSection';
-import FileStatus from './pages/FileStatus';
-import ThreatAnalysis from './pages/ThreatAnalysis';
+import FileHistory from './pages/FileHistory';
+import ThreatReport from './pages/ThreatReport';
 
 function App() {
   return (
@@ -26,15 +26,15 @@ function App() {
           </DashboardLayout>
         } />
 
-        <Route path="/dashboard/status" element={
+        <Route path="/dashboard/history" element={
           <DashboardLayout>
-            <FileStatus />
+            <FileHistory />
           </DashboardLayout>
         } />
 
-        <Route path="/dashboard/threats" element={
+        <Route path="/dashboard/reports" element={
           <DashboardLayout>
-            <ThreatAnalysis />
+            <ThreatReport />
           </DashboardLayout>
         } />
 

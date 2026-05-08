@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Scale } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Scale, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const [role, setRole] = useState<'Advocate' | 'Clerk'>('Advocate');
+  
   const navItems = [
-    { icon: LayoutDashboard, label: 'Overview', path: '/dashboard' },
-    { icon: UploadCloud, label: 'e-File Document', path: '/dashboard/upload' },
-    { icon: FileText, label: 'Case Status', path: '/dashboard/status' },
-    { icon: ShieldAlert, label: 'Threat Analysis', path: '/dashboard/threats' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: UploadCloud, label: 'Upload', path: '/dashboard/upload' },
+    { icon: ShieldAlert, label: 'Reports', path: '/dashboard/reports' },
+    { icon: FileText, label: 'History', path: '/dashboard/history' },
   ];
 
   return (
@@ -61,20 +64,37 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-government-accent flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-government-text">Dashboard</h1>
-          <div className="flex items-center space-x-4">
-            <div className="text-sm text-right">
-              <p className="font-medium text-government-text">Welcome, Advocate</p>
-              <p className="text-government-muted text-xs">ID: ADV-2023-8891</p>
+          <h1 className="text-xl font-semibold text-government-text">Government of India</h1>
+          <div className="flex items-center space-x-6">
+            
+            {/* Role Selector */}
+            <div className="flex items-center space-x-2 border border-government-accent bg-government-bg px-3 py-1.5 rounded-md">
+              <span className="text-xs font-medium text-government-muted uppercase tracking-wider">Role:</span>
+              <select 
+                value={role}
+                onChange={(e) => setRole(e.target.value as any)}
+                className="text-sm font-semibold text-government-blue bg-transparent focus:outline-none cursor-pointer appearance-none pr-4 relative"
+              >
+                <option value="Advocate">Advocate</option>
+                <option value="Clerk">Clerk</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-government-muted -ml-4 pointer-events-none" />
             </div>
-            <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold">
-              A
+
+            <div className="flex items-center space-x-3">
+              <div className="text-sm text-right">
+                <p className="font-medium text-government-text">Welcome, User</p>
+                <p className="text-government-muted text-xs">ID: {role === 'Advocate' ? 'ADV-2023-8891' : 'CLK-009-122'}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold">
+                U
+              </div>
             </div>
           </div>
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-8 bg-government-bg">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>
