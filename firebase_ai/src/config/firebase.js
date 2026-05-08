@@ -44,14 +44,16 @@ export const collections = {
  * @param {string} fileName - Name of the uploaded file
  * @param {string} fileUrl - Storage URL of the uploaded file
  * @param {string} status - Status of the upload (e.g., 'pending', 'scanned', 'rejected')
+ * @param {string} fileHash - SHA-256 hash of the file
  */
-export async function logUpload(userId, fileName, fileUrl, status = 'pending') {
+export async function logUpload(userId, fileName, fileUrl, status = 'pending', fileHash = null) {
   try {
     const logsRef = collection(db, collections.UPLOADS);
     await addDoc(logsRef, {
       userId,
       fileName,
       fileUrl,
+      fileHash,
       status,
       timestamp: serverTimestamp()
     });

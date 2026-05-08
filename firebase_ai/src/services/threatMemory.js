@@ -18,37 +18,36 @@ export async function calculateFileHash(file) {
  * Process a new file upload, checking against threat memory
  * @param {File} file - The file being uploaded
  * @param {string} userId - The ID of the user uploading the file
- * @returns {Promise<{isSafe: boolean, hash: string, threatData?: object}>}
+ * @returns {Promise<{isKnownThreat: boolean, hash: string}>}
  */
-export async function scanUploadAgainstMemory(file, userId) {
+export async function processFileThreat(file, userId) {
   try {
-    // 1. Calculate the file's hash
+    // 1. Generates SHA256 hash of uploaded file
     const fileHash = await calculateFileHash(file);
     
-    // 2. Check if this hash exists in old threats
+    // 2. Checks Firestore if hash already exists in threats
     const existingThreat = await checkThreatByHash(fileHash);
     
-    // 3. If a known high/critical threat is found, auto-block it
-    if (existingThreat && (existingThreat.riskLevel === 'high' || existingThreat.riskLevel === 'critical')) {
-      console.warn(`Upload blocked: File matches known threat (${fileHash})`);
-      
-      // Log the blocked upload attempt
-      await logUpload(userId, file.name, null, 'blocked_known_threat');
+    if (existingThreat) {
+      // 3. If exists -> mark as known threat
+      console.warn(`File matched known threat (${fileHash})`);
+      await logUpload(userId, file.name, null, 'blocked_known_threat', fileHash);
       
       return {
-        isSafe: false,
-        hash: fileHash,
-        threatData: existingThreat
+        isKnownThreat: true,
+        hash: fileHash
+      };
+    } else {
+      // 4. If not -> store it
+      await logUpload(userId, file.name, null, 'pending', fileHash);
+      
+      return {
+        isKnownThreat: false,
+        hash: fileHash
       };
     }
-    
-    // 4. File is not a known threat, proceed
-    return {
-      isSafe: true,
-      hash: fileHash
-    };
   } catch (error) {
-    console.error("Error scanning upload against threat memory: ", error);
-    throw new Error("Failed to process file against threat memory");
+    console.error("Error processing file against threat memory: ", error);
+    throw new Error("Failed to process file threat");
   }
 }
