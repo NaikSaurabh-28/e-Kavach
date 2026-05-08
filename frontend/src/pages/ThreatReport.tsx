@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShieldAlert, ShieldCheck, Activity, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
-export default function ThreatAnalysis() {
+export default function ThreatReport() {
   const scans = [
     { id: 'SCN-8821', file: 'affidavit_signed.pdf', status: 'Clean', time: '10:42 AM', icon: ShieldCheck, color: 'text-green-500' },
     { id: 'SCN-8820', file: 'evidence_annexure.zip', status: 'Flagged', time: '09:15 AM', icon: ShieldAlert, color: 'text-red-500' },
@@ -17,8 +17,8 @@ export default function ThreatAnalysis() {
       className="space-y-6"
     >
       <div>
-        <h2 className="text-2xl font-semibold text-government-text">Threat Analysis</h2>
-        <p className="text-government-muted">Automated security scanning of uploaded documents.</p>
+        <h2 className="text-2xl font-semibold text-government-text">Threat Report</h2>
+        <p className="text-government-muted">Automated security scanning and compliance reports of uploaded documents.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -55,16 +55,16 @@ export default function ThreatAnalysis() {
 
         <Card className="col-span-1 md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg">Recent Scans</CardTitle>
+            <CardTitle className="text-lg">Recent Security Scans</CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-government-muted" />
-              <Input type="search" placeholder="Search by ID or File..." className="pl-8 h-9" />
+              <Input type="search" placeholder="Search Reports..." className="pl-8 h-9 bg-white" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="mt-4 space-y-3">
               {scans.map((scan) => (
-                <div key={scan.id} className="flex items-center justify-between p-3 rounded-lg border border-government-accent hover:bg-government-bg/50 transition-colors">
+                <div key={scan.id} className="flex items-center justify-between p-3 rounded-lg border border-government-accent bg-white transition-colors">
                   <div className="flex items-center space-x-4">
                     <scan.icon className={`w-5 h-5 ${scan.color}`} />
                     <div>

@@ -4,7 +4,7 @@ import { FileText, CheckCircle, Clock, AlertTriangle, Search, Filter } from 'luc
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-export default function FileStatus() {
+export default function FileHistory() {
   const cases = [
     { id: 'W.P.(C) 102/2023', type: 'Writ Petition', status: 'Approved', date: 'Oct 14, 2023', icon: CheckCircle, color: 'text-green-500' },
     { id: 'C.A. 405/2023', type: 'Civil Appeal', status: 'Scrutiny Pending', date: 'Oct 12, 2023', icon: Clock, color: 'text-amber-500' },
@@ -20,15 +20,15 @@ export default function FileStatus() {
     >
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-2xl font-semibold text-government-text">Case Status</h2>
-          <p className="text-government-muted">Track the progress of your submitted documents.</p>
+          <h2 className="text-2xl font-semibold text-government-text">File History</h2>
+          <p className="text-government-muted">Track the historical progress of your submitted documents.</p>
         </div>
         <div className="flex space-x-3">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-government-muted" />
-            <Input type="search" placeholder="Search Case No..." className="pl-8" />
+            <Input type="search" placeholder="Search Case No..." className="pl-8 bg-white" />
           </div>
-          <Button variant="outline" className="flex items-center">
+          <Button variant="outline" className="flex items-center bg-white">
             <Filter className="w-4 h-4 mr-2" />
             Filter
           </Button>
@@ -37,7 +37,7 @@ export default function FileStatus() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Filings</CardTitle>
+          <CardTitle>Historical Filings</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border border-government-accent">
@@ -50,7 +50,7 @@ export default function FileStatus() {
             
             <div className="divide-y divide-government-accent">
               {cases.map((c) => (
-                <div key={c.id} className="grid grid-cols-12 gap-4 p-4 items-center text-sm hover:bg-government-bg/30 transition-colors">
+                <div key={c.id} className="grid grid-cols-12 gap-4 p-4 items-center text-sm hover:bg-government-bg/30 transition-colors bg-white">
                   <div className="col-span-4 flex items-center space-x-3">
                     <FileText className="w-5 h-5 text-government-blue flex-shrink-0" />
                     <div>
