@@ -1,185 +1,214 @@
-import math
-import re
-import zipfile
 import io
-import base64
-from typing import Dict, Any, List, Tuple
+import re
+import math
+from collections import Counter
+import zipfile
+import zlib
+from datetime import datetime
+from urllib.parse import urlparse
 
-try:
-    import pypdf
-    PYPDF_AVAILABLE = True
-except ImportError:
-    PYPDF_AVAILABLE = False
+import fitz  # PyMuPDF
+import pdfplumber
+import whois
 
-try:
-    from oletools.olevba import VBA_Parser
-    OLETOOLS_AVAILABLE = True
-except ImportError:
-    OLETOOLS_AVAILABLE = False
-
-class MalwareDetector:
-    def __init__(self):
-        self.DANGEROUS_KEYWORDS = [
-            b"powershell", b"cmd.exe", b"base64", b"wget", b"eval", 
-            b"shellcode", b"wscript.shell", b"vba", b"autoopen", 
-            b"wmic", b"mimikatz", b"invoke-expression", b"hidden", b"curl"
-        ]
-        self.URL_REGEX = re.compile(rb"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
-        self.BASE64_REGEX = re.compile(rb"(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
-        self.JS_PATTERN = re.compile(rb"<script[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
-        self.JS_EVAL_PATTERN = re.compile(rb"eval\s*\(|document\.write\s*\(|window\.execScript\s*\(")
-
-    def detect_suspicious_urls(self, content: bytes) -> dict:
-        urls = self.URL_REGEX.findall(content)
-        unique_urls = list(set(urls))
-        if unique_urls:
-            return {"score": 20, "reason": f"Suspicious URL(s) detected ({len(unique_urls)} found)"}
-        return {"score": 0, "reason": ""}
-
-    def detect_dangerous_keywords(self, content: bytes) -> dict:
-        found = []
-        lower_content = content.lower()
-        for kw in self.DANGEROUS_KEYWORDS:
-            if kw in lower_content:
-                found.append(kw.decode('utf-8', errors='ignore'))
-        if found:
-            return {"score": 15, "reason": f"Dangerous keywords detected: {', '.join(found)}"}
-        return {"score": 0, "reason": ""}
-
-    def detect_base64_strings(self, content: bytes) -> dict:
-        b64_strings = self.BASE64_REGEX.findall(content)
-        valid_b64 = []
-        for s in b64_strings:
+def layer1_suspicious_links(file_bytes: bytes, filename: str) -> dict:
+    try:
+        if not filename.lower().endswith('.pdf'):
+            return {"layer": 1, "name": "Suspicious Links", "status": "PASS", "details": "Not a PDF"}
+            
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        urls = []
+        for page in doc:
+            links = page.get_links()
+            for link in links:
+                if link.get("uri"):
+                    urls.append(link["uri"])
+        
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        regex_urls = re.findall(r"https?://[^\s]+", text)
+        urls.extend(regex_urls)
+        
+        urls = list(set(urls))
+        
+        shorteners = ['bit.ly', 'tinyurl.com', 'is.gd', 't.co', 'goo.gl', 'ow.ly']
+        suspicious_tlds = ['.xyz', '.tk', '.pw', '.ml']
+        
+        for url in urls:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            domain_no_port = domain.split(':')[0]
+            
+            if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", domain_no_port):
+                return {"layer": 1, "name": "Suspicious Links", "status": "FAIL", "details": f"IP-based URL found: {url}"}
+            
+            if any(s in domain for s in shorteners):
+                return {"layer": 1, "name": "Suspicious Links", "status": "FAIL", "details": f"URL shortener found: {url}"}
+                
+            if any(domain_no_port.endswith(tld) for tld in suspicious_tlds):
+                return {"layer": 1, "name": "Suspicious Links", "status": "FAIL", "details": f"Suspicious TLD found: {url}"}
+                
             try:
-                decoded = base64.b64decode(s)
-                if len(decoded) > 20:  # Filter out small/false positive base64 chunks
-                    valid_b64.append(s)
+                w = whois.whois(domain_no_port)
+                creation_date = w.creation_date
+                if isinstance(creation_date, list):
+                    creation_date = creation_date[0]
+                if creation_date:
+                    days_old = (datetime.now() - creation_date).days
+                    if days_old < 180:
+                        return {"layer": 1, "name": "Suspicious Links", "status": "FAIL", "details": f"Domain registered recently (<180 days): {url}"}
             except Exception:
                 pass
                 
-        if valid_b64:
-            return {"score": 20, "reason": f"Encoded text (Base64) detected ({len(valid_b64)} large strings)"}
-        return {"score": 0, "reason": ""}
+        return {"layer": 1, "name": "Suspicious Links", "status": "PASS", "details": "No suspicious links found"}
+    except Exception as e:
+        return {"layer": 1, "name": "Suspicious Links", "status": "PASS", "details": "Check could not be performed"}
 
-    def calculate_entropy(self, content: bytes) -> dict:
-        if not content:
-            return {"score": 0, "reason": ""}
-        entropy = 0
-        for x in range(256):
-            p_x = float(content.count(x)) / len(content)
-            if p_x > 0:
-                entropy += - p_x * math.log2(p_x)
+
+def layer2_macro_detection(file_bytes: bytes, filename: str) -> dict:
+    try:
+        lower_name = filename.lower()
+        if lower_name.endswith('.docx'):
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                if any("vbaproject.bin" in name.lower() for name in z.namelist()):
+                    return {"layer": 2, "name": "Macro Detection", "status": "FAIL", "details": "vbaProject.bin found in DOCX"}
+        elif lower_name.endswith('.pdf'):
+            keywords = [b"/JavaScript", b"/JS", b"/OpenAction", b"/AA", b"/Launch"]
+            for kw in keywords:
+                if kw in file_bytes:
+                    return {"layer": 2, "name": "Macro Detection", "status": "FAIL", "details": f"Suspicious PDF action found: {kw.decode('utf-8', errors='ignore')}"}
+        return {"layer": 2, "name": "Macro Detection", "status": "PASS", "details": "No macros or suspicious actions found"}
+    except Exception as e:
+        return {"layer": 2, "name": "Macro Detection", "status": "PASS", "details": "Check could not be performed"}
+
+
+def layer3_hidden_scripts(file_bytes: bytes, filename: str) -> dict:
+    try:
+        text = ""
+        if filename.lower().endswith('.pdf'):
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                for page in pdf.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted
         
-        if entropy > 7.5:
-            return {"score": 25, "reason": f"High entropy ({entropy:.2f}): Possible packed/encrypted content"}
-        return {"score": 0, "reason": ""}
-
-    def extract_pdf_metadata_and_suspicious(self, content: bytes) -> dict:
-        if not content.startswith(b"%PDF"):
-            return {"score": 0, "reason": ""}
-        
-        reasons = []
-        if b"/JavaScript" in content or b"/JS" in content:
-            reasons.append("Embedded JavaScript found in PDF")
-        if b"/Launch" in content:
-            reasons.append("Launch action found in PDF")
-        if b"/EmbeddedFiles" in content:
-            reasons.append("Embedded files found in PDF")
-            
-        if PYPDF_AVAILABLE:
-            try:
-                reader = pypdf.PdfReader(io.BytesIO(content))
-                meta = reader.metadata
-                if meta:
-                    reasons.append(f"PDF Metadata anomaly/extraction ({len(meta)} keys)")
-            except Exception:
-                pass
-                
-        if reasons:
-            return {"score": 10, "reason": "Metadata anomaly: " + " | ".join(reasons)}
-        return {"score": 0, "reason": ""}
-
-    def detect_macros(self, content: bytes, filename: str) -> dict:
-        ext = filename.lower().split('.')[-1]
-        if ext not in ['docx', 'docm', 'doc', 'xls', 'xlsm', 'xlsb', 'ppt', 'pptm']:
-            return {"score": 0, "reason": ""}
-
-        if OLETOOLS_AVAILABLE:
-            try:
-                parser = VBA_Parser(filename, data=content)
-                if parser.detect_vba_macros():
-                    results = parser.analyze_macros()
-                    suspicious_count = len([r for r in results if r[0] == 'Suspicious' or r[0] == 'AutoExec'])
-                    reasons = ["Macros detected via oletools"]
-                    if suspicious_count > 0:
-                        reasons.append(f"{suspicious_count} suspicious VBA keywords/autoexec found")
-                    return {"score": 40, "reason": " | ".join(reasons)}
-                return {"score": 0, "reason": ""}
-            except Exception:
-                pass
-                
-        # Fallback to simple zip extraction for OOXML files (docx, docm, etc)
-        try:
-            with zipfile.ZipFile(io.BytesIO(content)) as z:
-                if any("vbaproject" in name.lower() for name in z.namelist()):
-                    return {"score": 40, "reason": "Embedded macros (vbaProject.bin) found via Zip archive"}
-        except zipfile.BadZipFile:
-            pass
-            
-        return {"score": 0, "reason": ""}
-
-    def detect_scripts(self, content: bytes) -> dict:
-        reasons = []
-        
-        script_tags = self.JS_PATTERN.findall(content)
-        if script_tags:
-            reasons.append(f"Found {len(script_tags)} <script> tags")
-            
-        eval_calls = self.JS_EVAL_PATTERN.findall(content)
-        if eval_calls:
-            reasons.append(f"Found {len(eval_calls)} JavaScript eval/exec/write calls")
-            
-        if reasons:
-            return {"score": 30, "reason": "Scripts detected: " + " | ".join(reasons)}
-        return {"score": 0, "reason": ""}
-
-    def analyze(self, content: bytes, filename: str) -> dict:
-        results = {
-            "total_score": 0,
-            "findings": []
-        }
-        
-        checks = [
-            self.detect_suspicious_urls(content),
-            self.detect_dangerous_keywords(content),
-            self.detect_base64_strings(content),
-            self.calculate_entropy(content),
-            self.extract_pdf_metadata_and_suspicious(content),
-            self.detect_macros(content, filename),
-            self.detect_scripts(content)
+        keywords = [
+            "/javascript", "/js", "eval(", "exec(", "unescape(", 
+            "fromcharcode", "activexobject", "wscript", "shellcode", 
+            "document.write", "<script"
         ]
         
-        for check in checks:
-            if check["score"] > 0:
-                results["total_score"] += check["score"]
-                results["findings"].append(check)
+        text_lower = text.lower()
+        for kw in keywords:
+            if kw in text_lower:
+                return {"layer": 3, "name": "Hidden Scripts", "status": "FAIL", "details": f"Hidden script keyword found in text: {kw}"}
                 
-        score = results["total_score"]
-        if score < 20:
-            results["classification"] = "Safe"
-        elif score < 50:
-            results["classification"] = "Phishing Payload"
-        elif score <= 80:
-            results["classification"] = "Trojan-like"
-        else:
-            results["classification"] = "Ransomware-like"
-            
-        return results
+        raw_lower = file_bytes.lower()
+        for kw in keywords:
+            if kw.encode('utf-8') in raw_lower:
+                return {"layer": 3, "name": "Hidden Scripts", "status": "FAIL", "details": f"Hidden script keyword found in raw bytes: {kw}"}
+                
+        return {"layer": 3, "name": "Hidden Scripts", "status": "PASS", "details": "No hidden scripts found"}
+    except Exception as e:
+        return {"layer": 3, "name": "Hidden Scripts", "status": "PASS", "details": "Check could not be performed"}
 
-# Keep backward compatibility with existing main.py if needed
-def analyze_document(content: bytes, filename: str, extracted_text: str) -> Tuple[int, str, List[str]]:
-    detector = MalwareDetector()
-    analysis = detector.analyze(content, filename)
-    
-    issues = [f['reason'] for f in analysis['findings']]
-    return analysis['total_score'], analysis['classification'], issues
+
+def layer4_metadata_anomalies(file_bytes: bytes, filename: str) -> dict:
+    try:
+        if not filename.lower().endswith('.pdf'):
+            return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "Not a PDF"}
+            
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        meta = doc.metadata
+        if not meta:
+            return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "No metadata found"}
+            
+        def parse_pdf_date(d_str):
+            if not d_str or not d_str.startswith("D:"):
+                return None
+            try:
+                clean = d_str[2:16]
+                if len(clean) == 14:
+                    return datetime.strptime(clean, "%Y%m%d%H%M%S")
+            except:
+                pass
+            return None
+            
+        cdate = parse_pdf_date(meta.get("creationDate", ""))
+        mdate = parse_pdf_date(meta.get("modDate", ""))
+        
+        if cdate and cdate > datetime.now():
+            return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": "CreationDate is in the future"}
+            
+        if cdate and mdate and mdate < cdate:
+            return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": "ModDate is earlier than CreationDate"}
+            
+        suspicious_exts = [".exe", ".bat", ".sh", ".ps1"]
+        author = meta.get("author", "").lower()
+        creator = meta.get("creator", "").lower()
+        for ext in suspicious_exts:
+            if ext in author or ext in creator:
+                return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": f"Suspicious extension {ext} in Author/Creator"}
+                
+        for k, v in meta.items():
+            if isinstance(v, str):
+                if not v.isprintable():
+                    return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": f"Non-printable characters in metadata field {k}"}
+                    
+        return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "No metadata anomalies found"}
+    except Exception as e:
+        return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "Check could not be performed"}
+
+
+def layer5_executable_keywords(file_bytes: bytes, filename: str) -> dict:
+    try:
+        patterns = [
+            b'MZ',
+            b'TVqQ',
+            b'#!/',
+            b'powershell',
+            b'cmd.exe',
+            b'WScript.Shell',
+            b'CreateObject'
+        ]
+        for p in patterns:
+            if p in file_bytes:
+                return {"layer": 5, "name": "Executable Keywords", "status": "FAIL", "details": f"Executable byte pattern found"}
+        return {"layer": 5, "name": "Executable Keywords", "status": "PASS", "details": "No executable patterns found"}
+    except Exception as e:
+        return {"layer": 5, "name": "Executable Keywords", "status": "PASS", "details": "Check could not be performed"}
+
+
+def layer6_suspicious_entropy(file_bytes: bytes, filename: str) -> dict:
+    try:
+        if not filename.lower().endswith('.pdf'):
+            return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "Not a PDF"}
+            
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        for xref in range(1, doc.xref_length()):
+            if doc.xref_is_stream(xref):
+                obj_str = doc.xref_object(xref)
+                is_flatedecode = "/FlateDecode" in obj_str or "/Fl" in obj_str
+                
+                raw_stream = doc.xref_stream_raw(xref)
+                if not raw_stream:
+                    continue
+                    
+                data = raw_stream
+                if is_flatedecode:
+                    try:
+                        data = zlib.decompress(raw_stream)
+                    except Exception:
+                        pass
+                        
+                if data:
+                    freq = Counter(data)
+                    entropy = -sum((c/len(data)) * math.log2(c/len(data)) for c in freq.values())
+                    if entropy > 7.5:
+                        return {"layer": 6, "name": "Suspicious Entropy", "status": "FAIL", "details": f"Stream entropy {entropy:.2f} exceeds 7.5"}
+                        
+        return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "No suspicious entropy found"}
+    except Exception as e:
+        return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "Check could not be performed"}

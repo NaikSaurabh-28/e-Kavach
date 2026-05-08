@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UploadCloud, File, X, ShieldAlert, ShieldCheck, Activity, Terminal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 export default function UploadSection() {
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'scanning' | 'success' | 'blocked'>('idle');
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'scanning' | 'success' | 'blocked' | 'error'>('idle');
   const [scanLogs, setScanLogs] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -62,27 +64,59 @@ export default function UploadSection() {
     addLog('[NET] Checking signature against known threat databases...', 2400);
 
     try {
-      // Mock backend API call
       const formData = new FormData();
       formData.append('file', file);
       
-      // Simulate API call and scanning delay
-      await new Promise(resolve => setTimeout(resolve, 3500));
-      
-      // Since we don't have a real backend, we mock the fetch call failure and fallback to a random result
-      // Let's pretend files ending in 'virus.pdf' fail, otherwise succeed.
-      if (file.name.toLowerCase().includes('virus')) {
-        throw new Error('Malware signature detected');
+      const response = await fetch('http://localhost:8000/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Upload failed');
       }
 
-      addLog('[SECURE] No malicious payloads found. File integrity verified.', 3600);
-      setTimeout(() => setUploadStatus('success'), 4200);
+      const data = await response.json();
 
-    } catch (error) {
-      addLog(`[ALERT] FATAL: Threat signature matched. Quarantine protocol activated.`, 3600);
-      setTimeout(() => setUploadStatus('blocked'), 4200);
+      // Save to localStorage history
+      const newRecord = {
+        id: Date.now().toString(),
+        filename: file.name,
+        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        score: data.score,
+        classification: data.classification,
+        status: data.status,
+        issues: data.issues || [],
+      };
+      const existing = JSON.parse(localStorage.getItem('eKavach_scanHistory') || '[]');
+      localStorage.setItem('eKavach_scanHistory', JSON.stringify([...existing, newRecord]));
+
+      if (data.status === 'malicious') {
+        addLog(`[ALERT] FATAL: Threat signature matched. Quarantine protocol activated.`, 800);
+        setTimeout(() => {
+          setUploadStatus('blocked');
+          setTimeout(() => {
+            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size } } });
+          }, 2000);
+        }, 1200);
+      } else {
+        addLog('[SECURE] No malicious payloads found. File integrity verified.', 800);
+        setTimeout(() => {
+          setUploadStatus('success');
+          setTimeout(() => {
+            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size } } });
+          }, 2000);
+        }, 1200);
+      }
+
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Connection error';
+      addLog(`[ERROR] ${msg}. Please ensure the backend is running on port 8000.`, 800);
+      setTimeout(() => setUploadStatus('error'), 1200);
     }
   };
+
 
   return (
     <motion.div 
@@ -210,6 +244,17 @@ export default function UploadSection() {
                 >
                   <ShieldAlert className="w-6 h-6 text-red-500 animate-pulse" />
                   <span className="font-mono text-red-500 font-bold tracking-wider">UPLOAD BLOCKED: QUARANTINED</span>
+                </motion.div>
+              )}
+
+              {uploadStatus === 'error' && (
+                <motion.div 
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  className="h-16 bg-red-900/50 border-t border-red-800 flex items-center justify-center space-x-3 absolute bottom-0 w-full"
+                >
+                  <ShieldAlert className="w-6 h-6 text-red-500" />
+                  <span className="font-mono text-red-500 font-bold tracking-wider">SYSTEM ERROR</span>
                 </motion.div>
               )}
             </div>

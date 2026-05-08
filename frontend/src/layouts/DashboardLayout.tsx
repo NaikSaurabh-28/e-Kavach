@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Scale, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -19,8 +19,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className="w-64 bg-government-blue text-white flex flex-col shadow-xl z-20">
         <div className="h-16 flex items-center px-6 border-b border-white/10">
-          <Scale className="w-6 h-6 mr-3" />
-          <span className="font-semibold text-lg tracking-wide">e-Courts Portal</span>
+          <Shield className="w-6 h-6 mr-3 text-blue-300" />
+          <span className="font-bold text-lg tracking-wide">e-Kavach</span>
         </div>
         
         <nav className="flex-1 py-6 px-3 space-y-1">
@@ -64,7 +64,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-government-accent flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-government-text">Government of India</h1>
+          <div className="flex items-center space-x-3">
+            <Shield className="w-5 h-5 text-government-blue" />
+            <h1 className="text-lg font-bold text-government-blue">e-Kavach</h1>
+            <span className="text-government-muted text-sm">— Secure Document Scanner</span>
+          </div>
           <div className="flex items-center space-x-6">
             
             {/* Role Selector */}
@@ -72,7 +76,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <span className="text-xs font-medium text-government-muted uppercase tracking-wider">Role:</span>
               <select 
                 value={role}
-                onChange={(e) => setRole(e.target.value as any)}
+                onChange={(e) => setRole(e.target.value as 'Advocate' | 'Clerk')}
                 className="text-sm font-semibold text-government-blue bg-transparent focus:outline-none cursor-pointer appearance-none pr-4 relative"
               >
                 <option value="Advocate">Advocate</option>
