@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
@@ -6,7 +6,19 @@ import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<'Advocate' | 'Clerk'>('Advocate');
-  
+  const [username, setUsername] = useState('User');
+
+  useEffect(() => {
+    const user = localStorage.getItem('current_user');
+    if (user) {
+      setUsername(user);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('current_user');
+    // We do NOT remove 'ekavach_user' so credentials stay saved for the login page
+  };
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: UploadCloud, label: 'Upload', path: '/dashboard/upload' },
@@ -52,6 +64,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink
             to="/"
+            onClick={handleLogout}
             className="flex items-center px-3 py-2 text-sm font-medium text-blue-100 rounded-md hover:bg-white/5 hover:text-white transition-colors"
           >
             <LogOut className="w-5 h-5 mr-3" />
@@ -87,11 +100,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
             <div className="flex items-center space-x-3">
               <div className="text-sm text-right">
-                <p className="font-medium text-government-text">Welcome, User</p>
+                <p className="font-medium text-government-text">Welcome, {username}</p>
                 <p className="text-government-muted text-xs">ID: {role === 'Advocate' ? 'ADV-2023-8891' : 'CLK-009-122'}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold">
-                U
+              <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold uppercase">
+                {username.charAt(0)}
               </div>
             </div>
           </div>

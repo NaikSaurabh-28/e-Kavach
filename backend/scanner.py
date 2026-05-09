@@ -1,9 +1,6 @@
 import io
 import re
-import math
-from collections import Counter
 import zipfile
-import zlib
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -60,7 +57,7 @@ def layer1_suspicious_links(file_bytes: bytes, filename: str) -> dict:
                     if days_old < 180:
                         return {"layer": 1, "name": "Suspicious Links", "status": "FAIL", "details": f"Domain registered recently (<180 days): {url}"}
             except Exception:
-                pass
+                continue # Do not fail the whole layer if whois fails for one URL
                 
         return {"layer": 1, "name": "Suspicious Links", "status": "PASS", "details": "No suspicious links found"}
     except Exception as e:
@@ -152,11 +149,6 @@ def layer4_metadata_anomalies(file_bytes: bytes, filename: str) -> dict:
             if ext in author or ext in creator:
                 return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": f"Suspicious extension {ext} in Author/Creator"}
                 
-        for k, v in meta.items():
-            if isinstance(v, str):
-                if not v.isprintable():
-                    return {"layer": 4, "name": "Metadata Anomalies", "status": "FAIL", "details": f"Non-printable characters in metadata field {k}"}
-                    
         return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "No metadata anomalies found"}
     except Exception as e:
         return {"layer": 4, "name": "Metadata Anomalies", "status": "PASS", "details": "Check could not be performed"}
@@ -164,8 +156,14 @@ def layer4_metadata_anomalies(file_bytes: bytes, filename: str) -> dict:
 
 def layer5_executable_keywords(file_bytes: bytes, filename: str) -> dict:
     try:
+        if filename.lower().endswith('.pdf') and file_bytes.startswith(b'MZ'):
+            return {"layer": 5, "name": "Executable Keywords", "status": "FAIL", "details": "Disguised executable (MZ header)"}
+            
+        eof_idx = file_bytes.rfind(b'%%EOF')
+        if eof_idx != -1 and b'MZ' in file_bytes[eof_idx:]:
+            return {"layer": 5, "name": "Executable Keywords", "status": "FAIL", "details": "Polyglot attack (MZ after EOF)"}
+            
         patterns = [
-            b'MZ',
             b'TVqQ',
             b'#!/',
             b'powershell',
@@ -175,40 +173,8 @@ def layer5_executable_keywords(file_bytes: bytes, filename: str) -> dict:
         ]
         for p in patterns:
             if p in file_bytes:
-                return {"layer": 5, "name": "Executable Keywords", "status": "FAIL", "details": f"Executable byte pattern found"}
+                return {"layer": 5, "name": "Executable Keywords", "status": "FAIL", "details": f"Executable byte pattern found: {p}"}
         return {"layer": 5, "name": "Executable Keywords", "status": "PASS", "details": "No executable patterns found"}
     except Exception as e:
         return {"layer": 5, "name": "Executable Keywords", "status": "PASS", "details": "Check could not be performed"}
 
-
-def layer6_suspicious_entropy(file_bytes: bytes, filename: str) -> dict:
-    try:
-        if not filename.lower().endswith('.pdf'):
-            return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "Not a PDF"}
-            
-        doc = fitz.open(stream=file_bytes, filetype="pdf")
-        for xref in range(1, doc.xref_length()):
-            if doc.xref_is_stream(xref):
-                obj_str = doc.xref_object(xref)
-                is_flatedecode = "/FlateDecode" in obj_str or "/Fl" in obj_str
-                
-                raw_stream = doc.xref_stream_raw(xref)
-                if not raw_stream:
-                    continue
-                    
-                data = raw_stream
-                if is_flatedecode:
-                    try:
-                        data = zlib.decompress(raw_stream)
-                    except Exception:
-                        pass
-                        
-                if data:
-                    freq = Counter(data)
-                    entropy = -sum((c/len(data)) * math.log2(c/len(data)) for c in freq.values())
-                    if entropy > 7.5:
-                        return {"layer": 6, "name": "Suspicious Entropy", "status": "FAIL", "details": f"Stream entropy {entropy:.2f} exceeds 7.5"}
-                        
-        return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "No suspicious entropy found"}
-    except Exception as e:
-        return {"layer": 6, "name": "Suspicious Entropy", "status": "PASS", "details": "Check could not be performed"}

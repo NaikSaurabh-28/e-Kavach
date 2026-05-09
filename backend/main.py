@@ -5,11 +5,10 @@ from scanner import (
     layer2_macro_detection,
     layer3_hidden_scripts,
     layer4_metadata_anomalies,
-    layer5_executable_keywords,
-    layer6_suspicious_entropy
+    layer5_executable_keywords
 )
 
-app = FastAPI(title="e-Kavach Scanner", description="6-Layer Backend Security Scanner")
+app = FastAPI(title="e-Kavach Scanner", description="5-Layer Backend Security Scanner")
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,8 +30,7 @@ def classify_threat(layer_results):
         return "Ransomware"
     if 2 in failed_layers or 4 in failed_layers:
         return "Trojan"
-    if 6 in failed_layers:
-        return "Worm"
+
     if 1 in failed_layers:
         return "Botnet"
     if 3 in failed_layers:
@@ -55,7 +53,6 @@ async def scan_file(file: UploadFile = File(...)):
     layers.append(layer3_hidden_scripts(content, filename))
     layers.append(layer4_metadata_anomalies(content, filename))
     layers.append(layer5_executable_keywords(content, filename))
-    layers.append(layer6_suspicious_entropy(content, filename))
     
     threat_detected = any(l['status'] == 'FAIL' for l in layers)
     overall_status = "BLOCKED" if threat_detected else "SAFE"
@@ -83,7 +80,6 @@ async def upload_file_legacy(file: UploadFile = File(...)):
     layers.append(layer3_hidden_scripts(content, filename))
     layers.append(layer4_metadata_anomalies(content, filename))
     layers.append(layer5_executable_keywords(content, filename))
-    layers.append(layer6_suspicious_entropy(content, filename))
     
     failed_layers = [l for l in layers if l['status'] == 'FAIL']
     score = len(failed_layers) * 15 # dummy score adapter
@@ -97,6 +93,32 @@ async def upload_file_legacy(file: UploadFile = File(...)):
         "classification": classification,
         "issues": issues
     }
+
+from pydantic import BaseModel
+import asyncio
+from typing import List
+from gemini_explainer import generate_scan_explanation
+
+class ExplainRequest(BaseModel):
+    classification: str
+    issues: List[str]
+    score: float
+
+@app.post("/explain")
+async def explain_scan(req: ExplainRequest):
+    try:
+        loop = asyncio.get_event_loop()
+        explanation = await loop.run_in_executor(
+            None,
+            generate_scan_explanation,
+            req.classification,
+            req.issues,
+            req.score
+        )
+        return {"explanation": explanation}
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
