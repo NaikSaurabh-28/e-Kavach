@@ -5,7 +5,7 @@ import DashboardOverview from './pages/DashboardOverview';
 import UploadSection from './pages/UploadSection';
 import FileHistory from './pages/FileHistory';
 import ThreatReport from './pages/ThreatReport';
-
+import Settings from './pages/Settings';
 function App() {
   return (
     <BrowserRouter>
@@ -34,6 +34,12 @@ function App() {
         <Route path="/dashboard/reports" element={
           <DashboardLayout>
             <ThreatReport />
+          </DashboardLayout>
+        } />
+
+        <Route path="/dashboard/settings" element={
+          <DashboardLayout>
+            <Settings />
           </DashboardLayout>
         } />
 
