@@ -1,12 +1,24 @@
-import { useState } from 'react';
-import { ReactNode } from 'react';
+import { useState, useEffect } from 'react';
+import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Scale, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<'Advocate' | 'Clerk'>('Advocate');
-  
+  const [username, setUsername] = useState('User');
+
+  useEffect(() => {
+    const user = localStorage.getItem('current_user');
+    if (user) {
+      setUsername(user);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('current_user');
+    // We do NOT remove 'ekavach_user' so credentials stay saved for the login page
+  };
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: UploadCloud, label: 'Upload', path: '/dashboard/upload' },
@@ -19,8 +31,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className="w-64 bg-government-blue text-white flex flex-col shadow-xl z-20">
         <div className="h-16 flex items-center px-6 border-b border-white/10">
-          <Scale className="w-6 h-6 mr-3" />
-          <span className="font-semibold text-lg tracking-wide">e-Courts Portal</span>
+          <Shield className="w-6 h-6 mr-3 text-blue-300" />
+          <span className="font-bold text-lg tracking-wide">e-Kavach</span>
         </div>
         
         <nav className="flex-1 py-6 px-3 space-y-1">
@@ -52,6 +64,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </NavLink>
           <NavLink
             to="/"
+            onClick={handleLogout}
             className="flex items-center px-3 py-2 text-sm font-medium text-blue-100 rounded-md hover:bg-white/5 hover:text-white transition-colors"
           >
             <LogOut className="w-5 h-5 mr-3" />
@@ -64,7 +77,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-government-accent flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-government-text">Government of India</h1>
+          <div className="flex items-center space-x-3">
+            <Shield className="w-5 h-5 text-government-blue" />
+            <h1 className="text-lg font-bold text-government-blue">e-Kavach</h1>
+            <span className="text-government-muted text-sm">— Secure Document Scanner</span>
+          </div>
           <div className="flex items-center space-x-6">
             
             {/* Role Selector */}
@@ -72,7 +89,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <span className="text-xs font-medium text-government-muted uppercase tracking-wider">Role:</span>
               <select 
                 value={role}
-                onChange={(e) => setRole(e.target.value as any)}
+                onChange={(e) => setRole(e.target.value as 'Advocate' | 'Clerk')}
                 className="text-sm font-semibold text-government-blue bg-transparent focus:outline-none cursor-pointer appearance-none pr-4 relative"
               >
                 <option value="Advocate">Advocate</option>
@@ -83,11 +100,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
             <div className="flex items-center space-x-3">
               <div className="text-sm text-right">
-                <p className="font-medium text-government-text">Welcome, User</p>
+                <p className="font-medium text-government-text">Welcome, {username}</p>
                 <p className="text-government-muted text-xs">ID: {role === 'Advocate' ? 'ADV-2023-8891' : 'CLK-009-122'}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold">
-                U
+              <div className="h-10 w-10 rounded-full bg-government-blue/10 flex items-center justify-center text-government-blue font-bold uppercase">
+                {username.charAt(0)}
               </div>
             </div>
           </div>

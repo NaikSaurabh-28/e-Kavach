@@ -1,0 +1,17 @@
+# Environment variables
+.env
+*.env
+.env.*
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Firebase
+.firebase/
+firebase-export-*
+
+# Python
+__pycache__/
+*.pyc
