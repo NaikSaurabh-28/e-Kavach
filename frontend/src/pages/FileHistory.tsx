@@ -1,173 +1,335 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, CheckCircle, AlertTriangle, Search, Filter, Trash2 } from 'lucide-react';
+import {
+ShieldAlert,
+ShieldCheck,
+Search,
+ArrowUpDown,
+FileText,
+Trash2
+} from 'lucide-react';
+
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
 interface ScanRecord {
-  id: string;
-  filename: string;
-  date: string;
-  score: number;
-  classification: string;
-  status: string;
-  issues: string[];
+id: string;
+filename: string;
+date: string;
+score: number;
+classification: string;
+status: string;
+issues: string[];
 }
 
 export default function FileHistory() {
-  const navigate = useNavigate();
-  const [history, setHistory] = useState<ScanRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'safe' | 'malicious'>('all');
+const navigate = useNavigate();
 
-  useEffect(() => {
-    const stored = localStorage.getItem('eKavach_scanHistory');
-    if (stored) {
-      try {
-        setHistory(JSON.parse(stored).reverse());
-      } catch {
-        setHistory([]);
-      }
-    }
-  }, []);
+const [history, setHistory] = useState<ScanRecord[]>([]);
+const [searchQuery, setSearchQuery] = useState('');
+const [filterStatus, setFilterStatus] = useState<'All' | 'Safe' | 'Blocked'>('All');
 
-  const clearHistory = () => {
-    localStorage.removeItem('eKavach_scanHistory');
+const [sortConfig, setSortConfig] = useState<{
+key: keyof ScanRecord;
+direction: 'asc' | 'desc';
+} | null>({
+key: 'date',
+direction: 'desc'
+});
+
+useEffect(() => {
+const stored = localStorage.getItem('eKavach_scanHistory');
+
+```
+if (stored) {
+  try {
+    setHistory(JSON.parse(stored).reverse());
+  } catch {
     setHistory([]);
-  };
+  }
+}
+```
 
-  const filtered = history.filter(item => {
-    const matchesSearch = item.filename.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || item.status === filterStatus;
-    return matchesSearch && matchesFilter;
+}, []);
+
+const clearHistory = () => {
+localStorage.removeItem('eKavach_scanHistory');
+setHistory([]);
+};
+
+const handleSort = (key: keyof ScanRecord) => {
+let direction: 'asc' | 'desc' = 'asc';
+
+```
+if (
+  sortConfig &&
+  sortConfig.key === key &&
+  sortConfig.direction === 'asc'
+) {
+  direction = 'desc';
+}
+
+setSortConfig({ key, direction });
+```
+
+};
+
+const filteredAndSortedData = useMemo(() => {
+let result = [...history];
+
+```
+if (searchQuery) {
+  result = result.filter(
+    item =>
+      item.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.classification.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+}
+
+if (filterStatus !== 'All') {
+  result = result.filter(item =>
+    filterStatus === 'Safe'
+      ? item.status === 'safe'
+      : item.status === 'malicious'
+  );
+}
+
+if (sortConfig) {
+  result.sort((a, b) => {
+    const aValue = a[sortConfig.key];
+    const bValue = b[sortConfig.key];
+
+    if (aValue < bValue)
+      return sortConfig.direction === 'asc' ? -1 : 1;
+
+    if (aValue > bValue)
+      return sortConfig.direction === 'asc' ? 1 : -1;
+
+    return 0;
   });
+}
 
-  const viewReport = (item: ScanRecord) => {
-    navigate('/dashboard/reports', {
-      state: {
-        scanResult: {
-          status: item.status,
-          score: item.score,
-          classification: item.classification,
-          issues: item.issues,
-        },
-        fileInfo: { name: item.filename, size: 0 },
-      }
-    });
-  };
+return result;
+```
 
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-semibold text-government-text">Scan History</h2>
-          <p className="text-government-muted">All documents previously scanned by e-Kavach.</p>
-        </div>
-        <div className="flex space-x-3">
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-government-muted" />
-            <Input
-              type="search"
-              placeholder="Search filename..."
-              className="pl-8 bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'safe' | 'malicious')}
-            className="border border-government-accent rounded-md px-3 py-2 text-sm bg-white text-government-text focus:outline-none"
-          >
-            <option value="all">All</option>
-            <option value="safe">Safe</option>
-            <option value="malicious">Threats</option>
-          </select>
-          {history.length > 0 && (
-            <Button variant="outline" className="bg-white text-red-500 border-red-200 hover:bg-red-50" onClick={clearHistory}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear
-            </Button>
-          )}
-        </div>
+}, [history, searchQuery, filterStatus, sortConfig]);
+
+const viewReport = (item: ScanRecord) => {
+navigate('/dashboard/reports', {
+state: {
+scanResult: {
+status: item.status,
+score: item.score,
+classification: item.classification,
+issues: item.issues,
+},
+fileInfo: {
+name: item.filename,
+size: 0,
+},
+},
+});
+};
+
+return (
+<motion.div
+initial={{ opacity: 0, y: 10 }}
+animate={{ opacity: 1, y: 0 }}
+className="space-y-6 max-w-6xl mx-auto"
+> <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4"> <div> <h2 className="text-2xl font-semibold text-government-text">
+Upload History & Logs </h2>
+
+```
+      <p className="text-government-muted">
+        Audit trail of all scanned documents and their security verdicts.
+      </p>
+    </div>
+
+    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+      <div className="relative w-full sm:w-64">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-government-muted" />
+
+        <Input
+          type="search"
+          placeholder="Search files or threats..."
+          className="pl-8 bg-white"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>File Scan Records ({filtered.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
-              <div className="p-4 bg-blue-50 rounded-full">
-                <Filter className="w-8 h-8 text-government-blue" />
-              </div>
-              <p className="text-government-muted">
-                {history.length === 0
-                  ? 'No scan history found. Upload a document to get started.'
-                  : 'No results match your search or filter.'}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border border-government-accent overflow-hidden">
-              <div className="grid grid-cols-12 gap-4 p-4 border-b border-government-accent bg-government-bg/50 font-medium text-sm text-government-muted">
-                <div className="col-span-4">Filename</div>
-                <div className="col-span-2">Date Scanned</div>
-                <div className="col-span-2">Score</div>
-                <div className="col-span-2">Classification</div>
-                <div className="col-span-2 text-right">Actions</div>
-              </div>
-              
-              <div className="divide-y divide-government-accent">
-                {filtered.map((item) => (
-                  <div key={item.id} className="grid grid-cols-12 gap-4 p-4 items-center text-sm hover:bg-government-bg/30 transition-colors bg-white">
-                    <div className="col-span-4 flex items-center space-x-3">
-                      <FileText className="w-5 h-5 text-government-blue flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-government-text truncate max-w-[160px]">{item.filename}</p>
-                        <p className="text-xs text-government-muted">{item.issues.length} indicator(s)</p>
-                      </div>
+      <select
+        className="h-10 px-3 py-2 border border-input rounded-md bg-white text-sm"
+        value={filterStatus}
+        onChange={(e) =>
+          setFilterStatus(e.target.value as 'All' | 'Safe' | 'Blocked')
+        }
+      >
+        <option value="All">All Statuses</option>
+        <option value="Safe">Safe Only</option>
+        <option value="Blocked">Blocked Only</option>
+      </select>
+
+      {history.length > 0 && (
+        <Button
+          variant="outline"
+          className="bg-white text-red-500 border-red-200 hover:bg-red-50"
+          onClick={clearHistory}
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Clear
+        </Button>
+      )}
+    </div>
+  </div>
+
+  <Card className="shadow-md">
+    <CardHeader className="pb-4">
+      <CardTitle>
+        File Security Records ({filteredAndSortedData.length})
+      </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-government-muted uppercase bg-gray-50 border-y border-government-accent">
+            <tr>
+              <th
+                className="px-6 py-4 font-semibold cursor-pointer"
+                onClick={() => handleSort('filename')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>File Name</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </div>
+              </th>
+
+              <th
+                className="px-6 py-4 font-semibold cursor-pointer"
+                onClick={() => handleSort('date')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Date</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </div>
+              </th>
+
+              <th className="px-6 py-4 font-semibold">
+                Status
+              </th>
+
+              <th
+                className="px-6 py-4 font-semibold cursor-pointer"
+                onClick={() => handleSort('classification')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Classification</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </div>
+              </th>
+
+              <th
+                className="px-6 py-4 font-semibold cursor-pointer"
+                onClick={() => handleSort('score')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Score</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </div>
+              </th>
+
+              <th className="px-6 py-4 font-semibold text-right">
+                Actions
+              </th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-government-accent bg-white">
+            {filteredAndSortedData.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-6 py-8 text-center text-government-muted"
+                >
+                  No scan history found.
+                </td>
+              </tr>
+            ) : (
+              filteredAndSortedData.map((item) => (
+                <motion.tr
+                  key={item.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="hover:bg-gray-50/80 transition-colors"
+                >
+                  <td className="px-6 py-4 font-medium text-government-text flex items-center space-x-3">
+                    <FileText className="w-4 h-4 text-government-blue" />
+                    <span>{item.filename}</span>
+                  </td>
+
+                  <td className="px-6 py-4 text-government-muted">
+                    {item.date}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <div
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        item.status === 'safe'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {item.status === 'safe' ? (
+                        <ShieldCheck className="w-3 h-3 mr-1" />
+                      ) : (
+                        <ShieldAlert className="w-3 h-3 mr-1" />
+                      )}
+
+                      {item.status}
                     </div>
-                    <div className="col-span-2 text-government-text">{item.date}</div>
-                    <div className="col-span-2">
-                      <span className={`font-mono font-bold text-base ${
-                        item.score === 0 ? 'text-green-600'
-                        : item.score < 30 ? 'text-yellow-600'
-                        : item.score < 55 ? 'text-amber-600'
-                        : 'text-red-600'
-                      }`}>
-                        {item.score}/100
-                      </span>
-                    </div>
-                    <div className="col-span-2 flex items-center space-x-2">
-                      {item.status === 'safe'
-                        ? <CheckCircle className="w-4 h-4 text-green-500" />
-                        : <AlertTriangle className="w-4 h-4 text-red-500" />}
-                      <span className="font-medium text-government-text">{item.classification}</span>
-                    </div>
-                    <div className="col-span-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-government-blue hover:text-government-blue/80"
-                        onClick={() => viewReport(item)}
-                      >
-                        View Report
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
+                  </td>
+
+                  <td className="px-6 py-4 text-government-text">
+                    {item.classification}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <span
+                      className={`font-bold ${
+                        item.score > 70
+                          ? 'text-red-600'
+                          : item.score > 20
+                          ? 'text-amber-600'
+                          : 'text-green-600'
+                      }`}
+                    >
+                      {item.score}
+                    </span>
+                  </td>
+
+                  <td className="px-6 py-4 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-government-blue"
+                      onClick={() => viewReport(item)}
+                    >
+                      View Report
+                    </Button>
+                  </td>
+                </motion.tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+</motion.div>
+```
+
+);
 }
