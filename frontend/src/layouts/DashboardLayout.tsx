@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, UploadCloud, FileText, ShieldAlert, Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from "../lib/utils"
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<'Advocate' | 'Clerk'>('Advocate');
