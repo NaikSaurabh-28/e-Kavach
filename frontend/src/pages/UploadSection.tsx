@@ -97,7 +97,7 @@ export default function UploadSection() {
         setTimeout(() => {
           setUploadStatus('blocked');
           setTimeout(() => {
-            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size } } });
+            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size }, file: file } });
           }, 2000);
         }, 1200);
       } else {
@@ -105,7 +105,7 @@ export default function UploadSection() {
         setTimeout(() => {
           setUploadStatus('success');
           setTimeout(() => {
-            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size } } });
+            navigate('/dashboard/reports', { state: { scanResult: data, fileInfo: { name: file.name, size: file.size }, file: file } });
           }, 2000);
         }, 1200);
       }

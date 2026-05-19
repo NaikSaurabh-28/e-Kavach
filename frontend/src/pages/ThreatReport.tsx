@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import {
   ShieldAlert, ShieldCheck, Activity, FileKey, Cpu,
-  AlertTriangle, Fingerprint, Eye, Clock, Crosshair, Loader2, ArrowLeft
+  AlertTriangle, Fingerprint, Eye, Clock, Crosshair, Loader2, ArrowLeft,
+  Check, Download
 } from 'lucide-react';
 
 interface ScanResult {
@@ -30,13 +31,53 @@ export default function ThreatReport() {
   const state = location.state as {
     scanResult?: ScanResult;
     fileInfo?: FileInfo;
+    file?: File;
   } | null;
 
-  useEffect(() => {
-    if (!state?.scanResult) {
-      navigate('/dashboard/upload');
-      return;
+  const [sanitizing, setSanitizing] = useState(false);
+  const [sanitizeResult, setSanitizeResult] = useState<any>(null);
+  const [sanitizeError, setSanitizeError] = useState('');
+
+  const handleSanitize = async () => {
+    if (!state?.file) return;
+    setSanitizing(true);
+    setSanitizeError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', state.file);
+      
+      const response = await fetch('http://localhost:8000/sanitize', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) throw new Error('Sanitization failed');
+      const data = await response.json();
+      if (data.success) {
+        setSanitizeResult(data);
+      } else {
+        setSanitizeError(data.message || 'Sanitization failed');
+      }
+    } catch (err: any) {
+      setSanitizeError(err.message || 'Network error');
+    } finally {
+      setSanitizing(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!sanitizeResult?.filename) return;
+    const url = `http://localhost:8000/download/${sanitizeResult.filename}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', sanitizeResult.filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  useEffect(() => {
+    if (!state?.scanResult) return;
 
     const fetchExplanation = async () => {
       try {
@@ -64,9 +105,29 @@ export default function ThreatReport() {
     };
 
     fetchExplanation();
-  }, [state, navigate]);
+  }, [state]);
 
-  if (!state?.scanResult || !state?.fileInfo) return null;
+  if (!state?.scanResult || !state?.fileInfo) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 space-y-6 bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center max-w-2xl mx-auto mt-10">
+        <div className="bg-blue-50 p-6 rounded-full">
+          <ShieldAlert className="w-16 h-16 text-government-blue" />
+        </div>
+        <h2 className="text-2xl font-bold text-government-text">No Active Threat Report</h2>
+        <p className="text-government-muted max-w-md text-base">
+          This page displays the real-time analysis of your most recently uploaded file. You haven't uploaded a file in this session yet.
+        </p>
+        <div className="flex space-x-4 pt-2">
+          <Button onClick={() => navigate('/dashboard/upload')} className="bg-government-blue hover:bg-blue-800">
+            Upload a Document
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/dashboard/history')}>
+            View Past History
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const { scanResult, fileInfo } = state;
   const score = scanResult.score;
@@ -354,6 +415,94 @@ export default function ThreatReport() {
           </Card>
         </motion.div>
       </div>
+
+      {/* Sanitization Section */}
+      {!isSafe && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+          {fileInfo.name.toLowerCase().endsWith('.pdf') ? (
+            <Card className="shadow-md border-t-4 border-t-government-blue">
+              <CardHeader className="bg-blue-50/50">
+                <CardTitle className="text-government-blue flex items-center">
+                  <ShieldCheck className="w-5 h-5 mr-2" />
+                  Document Sanitization Available
+                </CardTitle>
+                <CardDescription className="text-government-muted">
+                  We can remove all malicious elements from this PDF while keeping your original content intact.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {!sanitizeResult ? (
+                  <div className="space-y-4">
+                    {sanitizeError && <p className="text-red-500 text-sm font-medium">{sanitizeError}</p>}
+                    <Button 
+                      className="w-full bg-government-blue hover:bg-blue-800 text-white font-bold py-6 text-lg"
+                      onClick={handleSanitize}
+                      disabled={sanitizing || !state?.file}
+                    >
+                      {sanitizing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Sanitizing Document...
+                        </>
+                      ) : (
+                        "Remove Threats and Get Clean PDF"
+                      )}
+                    </Button>
+                    {!state?.file && <p className="text-xs text-center text-amber-600">File not available in session. Please re-upload to sanitize.</p>}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <h3 className="text-green-800 font-bold flex items-center mb-3">
+                        <Check className="w-5 h-5 mr-2" /> Document Sanitized Successfully
+                      </h3>
+                      <p className="text-green-700 text-sm mb-4">{sanitizeResult.message}</p>
+                      
+                      <div className="space-y-2 mb-6">
+                        <p className="text-xs font-bold text-green-800 uppercase tracking-wider">Removed Items:</p>
+                        <ul className="space-y-1">
+                          {sanitizeResult.removed_items.map((item: string, idx: number) => (
+                            <li key={idx} className="text-sm text-green-700 flex items-center">
+                              <Check className="w-3 h-3 mr-2 text-green-500" /> {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      <div className="flex items-center justify-between gap-4">
+                        <Button 
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-6 text-lg"
+                          onClick={handleDownload}
+                        >
+                          <Download className="w-5 h-5 mr-2" />
+                          Download Clean PDF
+                        </Button>
+                        <div className="shrink-0">
+                          {sanitizeResult.verified_clean ? (
+                            <div className="bg-green-100 text-green-700 px-3 py-2 rounded-md flex items-center font-bold text-sm border border-green-200 shadow-sm">
+                              <Check className="w-4 h-4 mr-1.5" /> Verified Clean ✓
+                            </div>
+                          ) : (
+                            <div className="bg-amber-100 text-amber-700 px-3 py-2 rounded-md flex items-center font-bold text-sm border border-amber-200 shadow-sm">
+                              <AlertTriangle className="w-4 h-4 mr-1.5" /> Review Required
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="bg-gray-100 p-4 rounded-lg border border-gray-200 text-center">
+              <p className="text-sm text-gray-600 font-medium">
+                Sanitization is available for PDF files only. Please request the sender to resubmit a clean document without macros.
+              </p>
+            </div>
+          )}
+        </motion.div>
+      )}
     </motion.div>
   );
 }

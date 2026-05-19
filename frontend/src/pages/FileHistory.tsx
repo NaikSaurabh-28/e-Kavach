@@ -42,7 +42,7 @@ direction: 'desc'
 useEffect(() => {
 const stored = localStorage.getItem('eKavach_scanHistory');
 
-```
+
 if (stored) {
   try {
     setHistory(JSON.parse(stored).reverse());
@@ -50,7 +50,7 @@ if (stored) {
     setHistory([]);
   }
 }
-```
+
 
 }, []);
 
@@ -62,7 +62,7 @@ setHistory([]);
 const handleSort = (key: keyof ScanRecord) => {
 let direction: 'asc' | 'desc' = 'asc';
 
-```
+
 if (
   sortConfig &&
   sortConfig.key === key &&
@@ -72,14 +72,14 @@ if (
 }
 
 setSortConfig({ key, direction });
-```
+
 
 };
 
 const filteredAndSortedData = useMemo(() => {
 let result = [...history];
 
-```
+
 if (searchQuery) {
   result = result.filter(
     item =>
@@ -112,7 +112,7 @@ if (sortConfig) {
 }
 
 return result;
-```
+
 
 }, [history, searchQuery, filterStatus, sortConfig]);
 
@@ -141,7 +141,7 @@ className="space-y-6 max-w-6xl mx-auto"
 > <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4"> <div> <h2 className="text-2xl font-semibold text-government-text">
 Upload History & Logs </h2>
 
-```
+
       <p className="text-government-muted">
         Audit trail of all scanned documents and their security verdicts.
       </p>
@@ -329,7 +329,7 @@ Upload History & Logs </h2>
     </CardContent>
   </Card>
 </motion.div>
-```
+
 
 );
 }
