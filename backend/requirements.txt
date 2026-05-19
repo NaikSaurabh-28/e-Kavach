@@ -5,3 +5,8 @@ pypdf
 python-docx
 google-genai
 pydantic
+pikepdf
+pdfplumber
+python-whois
+PyMuPDF
+reportlab
